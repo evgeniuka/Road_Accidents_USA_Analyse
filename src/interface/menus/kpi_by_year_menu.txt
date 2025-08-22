@@ -7,3 +7,5 @@ Available options:
 5. Weekend share
 6. Precipitation share
 7. Bad weather share
+8. Accidents by month
+

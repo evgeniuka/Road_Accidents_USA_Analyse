@@ -3,4 +3,3 @@ Available options:
 1. Preset reports
 2. Custom reports
 3. Test square(common factors)
-4. Global influence scan

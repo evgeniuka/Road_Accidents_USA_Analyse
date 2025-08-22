@@ -4,6 +4,10 @@ from src.constants import SRC_PATH, USER_INPUT_FORM, EXIT_COMMANDS
 import src.visualization as visualization
 import src.analysis as analysis
 import src.stats as stats
+import sys
+from src.data_loader import ld
+from src.preprocessing import base_preprocess_datetime
+from tabulate import tabulate
 
 
 MENUS_PATH = SRC_PATH + r'/interface/menus'
@@ -22,10 +26,11 @@ MENU_HIERACHY = {
     KPI_BY_YEAR_MENU: CUSTOM_REPORTS_MENU
 }
 
-# ========= Utils =========
+# Utils
 
 def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
+
 
 def enable_utf8():
     try:
@@ -35,6 +40,7 @@ def enable_utf8():
         pass
     if os.name == 'nt':
         os.system('chcp 65001 > nul')
+
 
 def press_to_continue(next_action, df):
     try:
@@ -56,6 +62,7 @@ def checked_input(message='') -> str:
     user_input = input(USER_INPUT_FORM).lower().strip()
     exit_program(user_input)
     return user_input
+
 
 def print_centered(text: str) -> None:
     width = shutil.get_terminal_size().columns
@@ -82,7 +89,7 @@ def print_logo_centered(filepath):
             print_centered(row)
             time.sleep(0.02)
             print()
-        time.sleep(0.2)
+        time.sleep(0.02)
 
 def print_menu(filepath, parent_menu=False):
     filepath_check(filepath)
@@ -110,6 +117,7 @@ def ask_for_visualize(df, plot_title=None, chart_type='bar') -> None:
         case '2' | 'no' | 'n':
             pass
 
+# def check_year(year: str) -> int:
 def check_year(year: str) -> pd.Timestamp:
     valid_years = [str(y) for y in range(2016, 2024)]
     min_year = min(valid_years)
@@ -117,6 +125,8 @@ def check_year(year: str) -> pd.Timestamp:
     while year not in valid_years:
         year = checked_input(f'Not an option! Please, choose the year from {min_year} to {max_year}')
     return pd.to_datetime(year).year
+# return int(year)
+
 
 def check_city(df: pd.DataFrame, city: str) -> str:
     valid_cities = df['City'].str.lower().unique()
@@ -125,7 +135,7 @@ def check_city(df: pd.DataFrame, city: str) -> str:
         city = checked_input(f'The data base has no this city. Please, check the city name.')
     return city
 
-# ========= Main Menus =========
+# Menus
 
 def main_menu(df):
     print_menu(MAIN_MENU)
@@ -138,10 +148,6 @@ def main_menu(df):
             custom_report_menu(df)
         case "3":
             stats.chi2_bulk_severe_vs_common_factors(df)
-            press_to_continue(main_menu, df)
-            return
-        case "4":
-            stats.global_influence_scan(df)
             press_to_continue(main_menu, df)
             return
 
@@ -158,7 +164,7 @@ def preset_reports_menu(df: pd.DataFrame):
     match user_input:
         case "1":
             df_count_by_cities = analysis.count_by_cities(df)
-            print(df_count_by_cities)
+            print(tabulate(df_count_by_cities, headers='keys', tablefmt='pretty'))
             ask_for_visualize(df_count_by_cities, plot_title='Top accidents by city for 2016 - 2023')
             press_to_continue(main_menu, df)
             return
@@ -166,7 +172,7 @@ def preset_reports_menu(df: pd.DataFrame):
             user_year = checked_input('\nEnter the year')
             user_year = check_year(user_year)
             df_count_by_cities = analysis.count_by_cities_years(df, year=user_year)
-            print(df_count_by_cities)
+            print(tabulate(df_count_by_cities, headers='keys', tablefmt='pretty'))
             ask_for_visualize(df_count_by_cities, plot_title=f'Top accidets by city for {user_year} year')
             press_to_continue(main_menu, df)
             return
@@ -174,18 +180,22 @@ def preset_reports_menu(df: pd.DataFrame):
             user_city = checked_input('\nEnter the city name')
             user_city = check_city(df, user_city)
             df_city_accidents_count_by_year = analysis.city_accidents_count_by_year(df, city=user_city)
-            print(df_city_accidents_count_by_year)
-            ask_for_visualize(df_city_accidents_count_by_year, chart_type='line',
-                              plot_title=f'Count of accidents for the {user_city}, split by year')
+            print(tabulate(df_city_accidents_count_by_year, headers='keys', tablefmt='pretty'))
+            ask_for_visualize(df_city_accidents_count_by_year, chart_type='line', plot_title=f'Count of accidents for the {user_city}, split by year')
             press_to_continue(main_menu, df)
+            # print(df_city_accidents_count_by_year)
+            # ask_for_visualize(df_city_accidents_count_by_year, chart_type='line',
+            #                   plot_title=f'Count of accidents for the {user_city}, split by year')
+            # press_to_continue(main_menu, df)
             return
         case "4":
             user_city = checked_input('\nEnter the city name')
             user_city = check_city(df, user_city)
             user_year = checked_input('\nEnter the year')
             user_year = check_year(user_year)
-            df_city_dangerous_streets = analysis.city_dangerous_streets(df, city=user_city, year=user_year)
-            print(df_city_dangerous_streets)
+            user_num_rows = int(checked_input('\nHow many top results would you like to display?'))
+            df_city_dangerous_streets = analysis.city_dangerous_streets(df, city=user_city, year=user_year, num_rows=user_num_rows)
+            print(tabulate(df_city_dangerous_streets, headers='keys', tablefmt='pretty'))
             ask_for_visualize(df_city_dangerous_streets)
             press_to_continue(main_menu, df)
             return
@@ -239,6 +249,7 @@ def start_from_input(s: str):
     except Exception:
         return None
 
+
 def end_exclusive_from_input(s: str):
     s = (s or "").strip()
     if not s:
@@ -256,6 +267,7 @@ def end_exclusive_from_input(s: str):
         return base + pd.DateOffset(days=1)
     except Exception:
         return None
+
 
 def choose_period_df(df: pd.DataFrame) -> pd.DataFrame:
     print("\nWhich period do you want to show?")
@@ -306,7 +318,8 @@ def choose_kpi() -> str:
     print("5. Weekend share (%)")
     print("6. Precipitation share (%)")
     print("7. Bad weather share (%)")
-    choice = checked_input("\nChoose KPI (1-7): ").strip()
+    print("8. Accidents by month")
+    choice = checked_input("\nChoose KPI (1-8): ").strip()
     return {
         "1": "__stacked__",
         "2": "accidents",
@@ -315,6 +328,7 @@ def choose_kpi() -> str:
         "5": "weekend_share",
         "6": "precip_share",
         "7": "bad_weather_share",
+        "8": "accidents_by_month",
     }.get(choice, "accidents")
 
 # ========= KPI menu (thin UI) =========
@@ -368,6 +382,12 @@ def kpi_by_year_menu(df: pd.DataFrame) -> pd.DataFrame:
         )
         print(pretty[["year", "accidents"]].rename(columns={"accidents": "Accidents (per 10k)"}))
         return d  # возвращаем df с фичами наверх
+
+    if metric == "accidents_by_month":
+        df_month = analysis.accidents_by_month(d_filtered)
+        print(df_month)
+        ask_for_visualize(df_month)
+        return d
 
     df_kpi = analysis.kpi_by_year(d_filtered, metric)
     print(df_kpi)
