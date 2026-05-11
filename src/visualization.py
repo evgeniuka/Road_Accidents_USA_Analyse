@@ -1,5 +1,9 @@
 import matplotlib
-matplotlib.use('Qt5Agg')
+import os
+
+if os.getenv("MPLBACKEND"):
+    matplotlib.use(os.environ["MPLBACKEND"])
+
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd

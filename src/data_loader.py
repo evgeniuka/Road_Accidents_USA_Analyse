@@ -3,6 +3,7 @@ import pandas as pd
 from src.preprocessing import object_columns_to_category, base_preprocess_datetime
 from src.constants import (
     CSV,                    # fallback path (optional)
+    SAMPLE_CSV,
     EXTERNAL_RAW_CSV,       # D:\git\dataset\US_Accidents_March23.csv
     EXTERNAL_PROCESSED_DIR, # D:\git\accidents_clean\
     EXTERNAL_CLEAN_CSV,     # D:\git\accidents_clean\US_Accidents_March23_clean.csv
@@ -56,8 +57,27 @@ def load_external_clean_or_build() -> pd.DataFrame:
         return pd.read_csv(EXTERNAL_CLEAN_CSV, parse_dates=["Start_Time"], low_memory=False)
     return build_clean_to_parent()
 
+
+def load_sample() -> pd.DataFrame:
+    if not os.path.exists(SAMPLE_CSV):
+        raise FileNotFoundError(f"Sample CSV not found: {SAMPLE_CSV}")
+    df = pd.read_csv(SAMPLE_CSV, low_memory=False)
+    return _etl_clean_dataframe(df)
+
+
+def load_dataset(use_sample: bool = False) -> pd.DataFrame:
+    if use_sample:
+        return load_sample()
+    try:
+        return load_external_clean_or_build()
+    except FileNotFoundError as exc:
+        print(str(exc))
+        print("\n[Notice] Using the bundled sample dataset instead.")
+        return load_sample()
+
+
 def ld(*_args, **_kwargs) -> pd.DataFrame:
-    return load_external_clean_or_build()
+    return load_dataset()
 
 # def ld(p, yrs=None):
 #     keep = [

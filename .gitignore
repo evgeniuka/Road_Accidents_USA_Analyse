@@ -1,5 +1,13 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.idea/
+.venv/
+venv/
 data/raw/US_Accidents_March23.csv
 /data/raw/US_Accidents_March23.csv
-__pycache__/
-*.pyc
-*.pyo
+data/processed/.~lock*
+data/raw/.~lock*
+accidents_clean/
+temp/
+*.log

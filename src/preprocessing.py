@@ -34,7 +34,7 @@ def base_preprocess_datetime(
     d = df.copy()
 
     # datetime
-    d.loc[:, time_col] = pd.to_datetime(d[time_col], errors="coerce")
+    d[time_col] = pd.to_datetime(d[time_col], errors="coerce")
     d = d.dropna(subset=[time_col]).reset_index(drop=True)
 
     # удобные поля дат

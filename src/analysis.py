@@ -1,11 +1,8 @@
 import re
 import numpy as np
 import pandas as pd
-import src.visualization as visualization
 import src.preprocessing as prepro
 import src.constants as consts
-import src.preprocessing as prepro
-import src.visualization as visualization
 from src.preprocessing import object_columns_to_category
 
 
@@ -27,7 +24,7 @@ def correlation_overview(df):
         if c in df.columns:
             show(df, c)
         else:
-            print(f"(skip) {c} — column not found")
+            print(f"(skip) {c} - column not found")
 
     num = [
         "Severity", "is_severe", "is_night", "is_rush_hour",
@@ -58,6 +55,8 @@ def correlation_overview(df):
         return None
 
     corr = data.corr(numeric_only=True)
+    import src.visualization as visualization
+
     visualization.plot_corr(corr)
     return corr
 
@@ -364,10 +363,8 @@ def city_dangerous_streets(df: pd.DataFrame, city: str,  year: int, num_rows=con
 
     return df_processed
 
-def пeekend(df: pd.DataFrame, alpha: float = 0.05) -> None:
-    """Super-simple χ² test: is_severe (Severity>=3) vs is_weekend (Sat/Sun).
-    Prints observed/expected tables and conclusion. Requires scipy."""
-    import pandas as pd
+def chi2_is_severe_vs_weekend(df: pd.DataFrame, alpha: float = 0.05) -> None:
+    """Run a chi-square test between severe accidents and weekend timing."""
     try:
         from scipy.stats import chi2_contingency
     except Exception:
@@ -375,22 +372,20 @@ def пeekend(df: pd.DataFrame, alpha: float = 0.05) -> None:
         return
 
     d = df.copy()
-    # Minimal features inline (без лишних зависимостей)
     t = pd.to_datetime(d["Start_Time"], errors="coerce")
     d = d.loc[t.notna()].copy()
     d["is_weekend"] = t.dt.dayofweek.ge(5).astype(int)
     d["is_severe"] = pd.to_numeric(d["Severity"], errors="coerce").ge(3).astype(int)
 
-    # Contingency table
     ct = pd.crosstab(d["is_severe"], d["is_weekend"])
     if ct.shape[0] < 2 or ct.shape[1] < 2:
         print("Not enough variation for chi-square (need at least a 2x2 table).")
         return
 
-    chi2, p, dof, expected = chi2_contingency(ct.values, correction=True)  # Yates for 2x2
+    chi2, p, dof, expected = chi2_contingency(ct.values, correction=True)
     exp_df = pd.DataFrame(expected, index=ct.index, columns=ct.columns)
 
-    print("\n=== Chi-square: is_severe × is_weekend ===")
+    print("\n=== Chi-square: is_severe x is_weekend ===")
     print("Observed counts:\n", ct)
     print("\nExpected counts (rounded):\n", exp_df.round(2))
     print(f"\nchi2 = {chi2:.3f}, dof = {dof}, p-value = {p:.6f}")
