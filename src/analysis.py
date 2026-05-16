@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import src.preprocessing as prepro
 import src.constants as consts
-from src.preprocessing import object_columns_to_category
+from src.preprocessing import object_columns_to_category, parse_datetime_series
 
 
 def correlation_overview(df):
@@ -48,10 +48,6 @@ def correlation_overview(df):
 
     if data.shape[1] == 0:
         print("(skip) all selected columns are constant")
-        return
-
-    if data.shape[1] == 0:
-        print("(skip) nothing to correlate")
         return None
 
     corr = data.corr(numeric_only=True)
@@ -63,38 +59,30 @@ def correlation_overview(df):
 
 def count_by_cities(df: pd.DataFrame, num_rows=consts.NUM_ROWS, cities=None) -> pd.DataFrame:
     if cities is None:
-        df_processed = df['City'].value_counts().head(num_rows).reset_index()
-        df_processed.columns = ['City', 'NumOfAccidents']
+        df_processed = (
+            df["City"]
+            .value_counts()
+            .head(num_rows)
+            .rename_axis("City")
+            .reset_index(name="NumOfAccidents")
+        )
     else:
-        df_processed = df[df['City'].isin(cities)].groupby('City')['City'].count().head(num_rows).sort_values(by='City', ascending=False)
-        df_processed.columns = ['City', 'NumOfAccidents']
+        df_processed = (
+            df[df["City"].isin(cities)]
+            .groupby("City", observed=True)
+            .size()
+            .sort_values(ascending=False)
+            .head(num_rows)
+            .rename_axis("City")
+            .reset_index(name="NumOfAccidents")
+        )
     prepro.set_index_starting_from_one(df_processed)
     return df_processed
-
-# def count_by_cities(df: pd.DataFrame, num_rows=consts.NUM_ROWS, cities=None) -> pd.DataFrame:
-#     if cities is None:
-#         out = (df['City'].value_counts()
-#                .head(num_rows)
-#                .rename_axis('City')
-#                .reset_index(name='NumOfAccidents'))
-#         prepro.set_index_starting_from_one(out)
-#         return out
-#     tmp = df[df['City'].isin(cities)]
-#     out = (tmp.groupby('City', observed=True)['City']
-#            .size()
-#            .rename('NumOfAccidents')
-#            .reset_index()
-#            .sort_values('NumOfAccidents', ascending=False)
-#            .head(num_rows))
-#     prepro.set_index_starting_from_one(out)
-#     return out
-
 
 def feat(df: pd.DataFrame) -> pd.DataFrame:
     d = df.copy()
 
-    # --- базовые поля ---
-    d["Start_Time"] = pd.to_datetime(d["Start_Time"], errors="coerce")
+    d["Start_Time"] = parse_datetime_series(d["Start_Time"])
     d["Severity"] = pd.to_numeric(d["Severity"], errors="coerce")
     d = d.dropna(subset=["Start_Time", "Severity"]).reset_index(drop=True)
 
@@ -103,38 +91,32 @@ def feat(df: pd.DataFrame) -> pd.DataFrame:
     d["year"] = d["Start_Time"].dt.year
     d["date"] = d["Start_Time"].dt.date
 
-    # --- бинарные признаки времени ---
     d["is_night"] = ((d["hour"] >= 20) | (d["hour"] <= 5)).astype(int)
     d["is_rush_hour"] = (d["hour"].between(7, 9) | d["hour"].between(16, 19)).astype(int)
     d["is_weekend"] = (d["day_of_week"] >= 5).astype(int)
 
-    # --- текст погоды (на случай отсутствия чисел) ---
     w_txt = d.get("Weather_Condition")
     w_txt = w_txt.astype("string").str.lower().fillna("") if w_txt is not None else pd.Series("", index=d.index)
 
-    # --- осадки: число ИЛИ текст ---
     num_prec = pd.to_numeric(d["Precipitation(in)"], errors="coerce") if "Precipitation(in)" in d.columns else None
     has_prec_by_num = (num_prec.fillna(0) > 0) if num_prec is not None else pd.Series(False, index=d.index)
     has_prec_by_text = w_txt.str.contains(r"rain|snow|sleet|hail|drizzle|storm|shower", regex=True)
     d["has_precipitation"] = (has_prec_by_num | has_prec_by_text).astype(int)
 
-    # --- «плохая погода» по тексту (шире) ---
     d["has_bad_weather"] = w_txt.str.contains(
         r"rain|snow|fog|mist|thunder|storm|hail|sleet|blizzard|ice|freezing|squall|dust|smoke|haze",
         regex=True
     ).fillna(False).astype(int)
 
-    # --- низкая видимость: нижний 1% чисел ИЛИ текст «туман/дым/пыль» ---
     if "Visibility(mi)" in d.columns:
         vis = pd.to_numeric(d["Visibility(mi)"], errors="coerce")
         if vis.notna().any():
             import numpy as np
-            thr_q5 = np.nanpercentile(vis, 5)  # нижние 5%
-            thr = max(thr_q5, 1.0)  # не ниже 1 мили как здоровый порог
+            thr_q5 = np.nanpercentile(vis, 5)
+            thr = max(thr_q5, 1.0)
             low_num = vis <= thr
             low_txt = w_txt.str.contains(r"fog|mist|smoke|haze|squall|dust", regex=True)
             low = (low_num | low_txt)
-            # если всё равно получилась одна категория — форсим порог 2 мили
             if low.nunique(dropna=True) < 2:
                 low = (vis < 2) | low_txt
             d["is_visibility_low"] = low.fillna(False).astype(int)
@@ -142,14 +124,12 @@ def feat(df: pd.DataFrame) -> pd.DataFrame:
             d["is_visibility_low"] = 0
     else:
         d["is_visibility_low"] = w_txt.str.contains(r"fog|mist|smoke|haze|squall|dust", regex=True).astype(int)
-    # --- мороз (по числу) ---
     if "Temperature(F)" in d.columns:
         tnum = pd.to_numeric(d["Temperature(F)"], errors="coerce")
         d["is_freezing"] = (tnum < 32).astype(int)
     else:
         d["is_freezing"] = w_txt.str.contains(r"freez|ice|frost", regex=True).astype(int)
 
-    # --- скорость ветра: бины ---
     wcol = next((c for c in d.columns if "Wind_Speed" in c), None)
     if wcol:
         ws = pd.to_numeric(d[wcol], errors="coerce")
@@ -157,7 +137,6 @@ def feat(df: pd.DataFrame) -> pd.DataFrame:
     else:
         d["wind_speed_bin"] = pd.Categorical(["NA"] * len(d))
 
-    # --- тип дороги по тексту улицы/описания ---
     txt = d["Street"].fillna(d.get("Description")).astype(str).str.lower()
     d["road_type"] = txt.map(lambda s:
                              "interstate" if re.search(r"\b(i-|interstate|fwy)\b", s) else
@@ -210,10 +189,10 @@ def show(df, feature_col):
         )
 
 def _year_col(df):
-    return pd.to_datetime(df['Start_Time'], errors='coerce').dt.year
+    return parse_datetime_series(df['Start_Time']).dt.year
 
 def kpi_by_year(df: pd.DataFrame, metric: str = 'accidents') -> pd.DataFrame:
-    y = pd.to_datetime(df['Start_Time'], errors='coerce').dt.year
+    y = parse_datetime_series(df['Start_Time']).dt.year
     g = df.copy().assign(year=y)
 
     if metric == 'accidents':
@@ -246,7 +225,7 @@ def kpi_by_year(df: pd.DataFrame, metric: str = 'accidents') -> pd.DataFrame:
 
 def kpi_by_year_all(df: pd.DataFrame) -> pd.DataFrame:
 
-    y = pd.to_datetime(df['Start_Time'], errors='coerce').dt.year
+    y = parse_datetime_series(df['Start_Time']).dt.year
     g = df.copy().assign(year=y)
 
     out = (
@@ -270,7 +249,7 @@ def kpi_by_year_all(df: pd.DataFrame) -> pd.DataFrame:
 
 def kpi_components_by_year(df: pd.DataFrame, scale: int = 10000) -> pd.DataFrame:
     g = df.copy()
-    g["year"] = pd.to_datetime(g["Start_Time"], errors="coerce").dt.year
+    g["year"] = parse_datetime_series(g["Start_Time"]).dt.year
     severe = g.get("is_severe", pd.Series(0, index=g.index)).astype(bool)
     weekend = g.get("is_weekend", pd.Series(0, index=g.index)).astype(bool)
     precip = g.get("has_precipitation", pd.Series(0, index=g.index)).astype(bool)
@@ -298,7 +277,7 @@ def kpi_components_by_year(df: pd.DataFrame, scale: int = 10000) -> pd.DataFrame
 
 def accidents_by_month(df: pd.DataFrame) -> pd.DataFrame:
     """Return accident counts grouped by month (1-12)."""
-    months = pd.to_datetime(df["Start_Time"], errors="coerce").dt.month
+    months = parse_datetime_series(df["Start_Time"]).dt.month
     out = (df.assign(month=months)
              .groupby("month")
              .size()
@@ -309,11 +288,10 @@ def accidents_by_month(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 def count_by_cities_years(df: pd.DataFrame, num_rows=consts.NUM_ROWS, cities=None, year=2023) -> pd.DataFrame:
-    # берём год из df['year'] если есть, иначе парсим
     if "year" in df.columns:
         y = df["year"]
     else:
-        y = pd.to_datetime(df["Start_Time"], errors="coerce").dt.year
+        y = parse_datetime_series(df["Start_Time"]).dt.year
 
     tmp = pd.DataFrame({"City": df["City"], "Year": y}).dropna(subset=["City","Year"])
     year = int(year)
@@ -336,7 +314,7 @@ def count_by_cities_years(df: pd.DataFrame, num_rows=consts.NUM_ROWS, cities=Non
 def city_accidents_count_by_year(df: pd.DataFrame, num_rows=consts.NUM_ROWS, city='new york') -> pd.DataFrame:
     tmp = pd.DataFrame({
         "City": df['City'],
-        "Year": pd.to_datetime(df['Start_Time'], errors='coerce').dt.year
+        "Year": parse_datetime_series(df['Start_Time']).dt.year
     }).dropna()
     city = str(city).lower()
     tmp = tmp[tmp['City'].str.lower() == city]
@@ -372,7 +350,7 @@ def chi2_is_severe_vs_weekend(df: pd.DataFrame, alpha: float = 0.05) -> None:
         return
 
     d = df.copy()
-    t = pd.to_datetime(d["Start_Time"], errors="coerce")
+    t = parse_datetime_series(d["Start_Time"])
     d = d.loc[t.notna()].copy()
     d["is_weekend"] = t.dt.dayofweek.ge(5).astype(int)
     d["is_severe"] = pd.to_numeric(d["Severity"], errors="coerce").ge(3).astype(int)

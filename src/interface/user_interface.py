@@ -7,6 +7,7 @@ import src.stats as stats
 import sys
 from src.data_loader import ld
 from src.preprocessing import base_preprocess_datetime
+from src.preprocessing import parse_datetime_series
 from tabulate import tabulate
 
 
@@ -219,13 +220,13 @@ def custom_report_menu(df: pd.DataFrame):
             press_to_continue(custom_report_menu, df)
             return
         case "2":
-            print("\nStat test: Chi-square (is_severe × is_weekend)")
-            df_period = choose_period_df(df)        # сначала период
+            print("\nStat test: Chi-square (is_severe x is_weekend)")
+            df_period = choose_period_df(df)
             if df_period.empty:
                 print("\n[Notice] No data left after filtering. Showing all years.")
                 df_period = df
             import src.analysis as analysis
-            analysis.chi2_is_severe_vs_weekend(df_period)   # запускаем тест
+            analysis.chi2_is_severe_vs_weekend(df_period)
             press_to_continue(custom_report_menu, df)
             return
         case _:
@@ -285,7 +286,7 @@ def choose_period_df(df: pd.DataFrame) -> pd.DataFrame:
             year = int(y)
             if "year" in df.columns:
                 return df[df["year"] == year]
-            years = pd.to_datetime(df["Start_Time"], errors="coerce").dt.year
+            years = parse_datetime_series(df["Start_Time"]).dt.year
             return df[years == year]
         print("Invalid year format. Showing all years.")
         return df
@@ -299,10 +300,10 @@ def choose_period_df(df: pd.DataFrame) -> pd.DataFrame:
             dt_to_excl = end_exclusive_from_input(s_to)
             if (dt_from is not None) and (dt_to_excl is not None) and (dt_from < dt_to_excl):
                 tmp = (df["Start_Time"] if pd.api.types.is_datetime64_any_dtype(df["Start_Time"])
-                       else pd.to_datetime(df["Start_Time"], errors="coerce"))
+                       else parse_datetime_series(df["Start_Time"]))
                 mask = (tmp >= dt_from) & (tmp < dt_to_excl)
                 return df[mask]
-            print("Could not parse the dates — please try again.")
+            print("Could not parse the dates - please try again.")
         print("Showing all years.")
         return df
 
@@ -333,35 +334,28 @@ def choose_kpi() -> str:
 
 # ========= KPI menu (thin UI) =========
 def kpi_by_year_menu(df: pd.DataFrame) -> pd.DataFrame:
-    # 1) сначала выбор KPI
     metric = choose_kpi()
 
-    # 2) потом выбор периода
     d_period = choose_period_df(df)
     if d_period.empty:
         print("\n[Notice] No data left after filtering. Showing all years.")
         d_period = df
 
-    # 3) гарантируем фичи (на полном df), чтобы последующие вызовы были быстрыми
     d = analysis.ensure_features(df)
 
-    # 4) применим период уже к обогащенному датасету
     if "Start_Time" in d.columns and pd.api.types.is_datetime64_any_dtype(d["Start_Time"]):
         times = d["Start_Time"]
     else:
-        times = pd.to_datetime(d["Start_Time"], errors="coerce")
+        times = parse_datetime_series(d["Start_Time"])
 
-    # пересчитаем фильтр периода относительно 'd'
     if d_period is not df:
-        # получим границы по d_period
-        _t = pd.to_datetime(df["Start_Time"], errors="coerce")
-        mask_src = df.index[_t.isin(pd.to_datetime(d_period["Start_Time"], errors="coerce"))]
+        _t = parse_datetime_series(df["Start_Time"])
+        mask_src = df.index[_t.isin(parse_datetime_series(d_period["Start_Time"]))]
         mask = d.index.isin(mask_src)
         d_filtered = d.loc[mask]
     else:
         d_filtered = d
 
-    # 5) отрисовка/таблица
     if metric == "__stacked__":
         pretty = (
             analysis.kpi_components_by_year(d_filtered, scale=10000)
@@ -381,7 +375,7 @@ def kpi_by_year_menu(df: pd.DataFrame) -> pd.DataFrame:
             ylabel="Accidents (per 10k)"
         )
         print(pretty[["year", "accidents"]].rename(columns={"accidents": "Accidents (per 10k)"}))
-        return d  # возвращаем df с фичами наверх
+        return d
 
     if metric == "accidents_by_month":
         df_month = analysis.accidents_by_month(d_filtered)
@@ -394,7 +388,7 @@ def kpi_by_year_menu(df: pd.DataFrame) -> pd.DataFrame:
     if len(df_kpi.columns) == 2:
         ask_for_visualize(df_kpi)
 
-    return d  # возвращаем df с фичами наверх
+    return d
 
 
 

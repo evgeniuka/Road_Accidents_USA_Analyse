@@ -1,8 +1,14 @@
 import pandas as pd
 
+
+def parse_datetime_series(series: pd.Series) -> pd.Series:
+    """Parse mixed timestamp formats used by the US Accidents CSV."""
+    return pd.to_datetime(series, errors="coerce", format="mixed")
+
+
 def parse_dates(df: pd.DataFrame, col: str = 'Start_Time') -> pd.DataFrame:
     if col in df.columns and not pd.api.types.is_datetime64_any_dtype(df[col]):
-        df[col] = pd.to_datetime(df[col], errors='coerce')
+        df[col] = parse_datetime_series(df[col])
     df = df.dropna(subset=[col])
     df['year'] = df[col].dt.year
     df['date'] = df[col].dt.date
@@ -30,18 +36,15 @@ def base_preprocess_datetime(
     import numpy as np
     import pandas as pd
 
-    # >>> ключ: работаем с копией, а не с возможным view
     d = df.copy()
 
     # datetime
-    d[time_col] = pd.to_datetime(d[time_col], errors="coerce")
+    d[time_col] = parse_datetime_series(d[time_col])
     d = d.dropna(subset=[time_col]).reset_index(drop=True)
 
-    # удобные поля дат
     d.loc[:, "year"] = d[time_col].dt.year
     d.loc[:, "date"] = d[time_col].dt.date
 
-    # простая зачистка экстремов (опционально)
     if apply_outliers and outlier_cols:
         for c in outlier_cols:
             if c in d.columns:

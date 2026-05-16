@@ -17,7 +17,6 @@ EXTERNAL_RAW_DIR       = os.path.join(PARENT_PATH, "dataset")
 EXTERNAL_RAW_CSV       = os.path.join(EXTERNAL_RAW_DIR, "US_Accidents_March23.csv")
 
 EXTERNAL_PROCESSED_DIR = os.path.join(PARENT_PATH, "accidents_clean")
-os.makedirs(EXTERNAL_PROCESSED_DIR, exist_ok=True)
 EXTERNAL_CLEAN_CSV     = os.path.join(EXTERNAL_PROCESSED_DIR, "US_Accidents_March23_clean.csv")
 # Other consts
 NUM_ROWS = 5    # default number of rows shown in menu reports

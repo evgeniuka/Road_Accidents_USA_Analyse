@@ -2,19 +2,24 @@ import os
 import pandas as pd
 from src.preprocessing import object_columns_to_category, base_preprocess_datetime
 from src.constants import (
-    CSV,                    # fallback path (optional)
+    CSV,
     SAMPLE_CSV,
-    EXTERNAL_RAW_CSV,       # D:\git\dataset\US_Accidents_March23.csv
-    EXTERNAL_PROCESSED_DIR, # D:\git\accidents_clean\
-    EXTERNAL_CLEAN_CSV,     # D:\git\accidents_clean\US_Accidents_March23_clean.csv
+    EXTERNAL_RAW_CSV,
+    EXTERNAL_PROCESSED_DIR,
+    EXTERNAL_CLEAN_CSV,
 )
 
 # Keep only necessary columns to reduce memory during ETL
 KEEP_COLS = [
-    "Start_Time", "Severity", "City", "Weather_Condition", "Visibility(mi)",
+    "ID", "Start_Time", "Severity", "Start_Lat", "Start_Lng",
+    "City", "County", "State", "Country",
+    "Weather_Condition", "Visibility(mi)",
     "Precipitation(in)", "Temperature(F)", "Wind_Speed(mph)",
-    "Bump", "Crossing", "Street", "Description",
+    "Distance(mi)", "Bump", "Crossing", "Junction", "Traffic_Signal",
+    "Street", "Description", "Sunrise_Sunset",
 ]
+
+CLEAN_CHUNK_SIZE = 500_000
 
 def _find_raw_csv() -> str:
     """Prefer external ..\\dataset\\US_Accidents_March23.csv; else fall back to constants.CSV."""
@@ -30,11 +35,10 @@ def _find_raw_csv() -> str:
     )
 
 def _etl_clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    """Parse dates, trim outliers, keep years 2016..2023, drop critical NAs, cast categories."""
+    """Parse dates, keep years 2016..2023, drop critical NAs, cast categories."""
     df = base_preprocess_datetime(
         df,
-        apply_outliers=True,
-        outlier_cols=["Visibility(mi)", "Precipitation(in)", "Temperature(F)", "Wind_Speed(mph)"]
+        apply_outliers=False,
     )
     if "year" in df.columns:
         df = df[df["year"].between(2016, 2023)]
@@ -42,19 +46,59 @@ def _etl_clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     df = object_columns_to_category(df, columns=["City", "Weather_Condition"])
     return df
 
+def _load_clean_csv() -> pd.DataFrame:
+    dtype = {
+        "ID": "string",
+        "Severity": "int8",
+        "Start_Lat": "float32",
+        "Start_Lng": "float32",
+        "Distance(mi)": "float32",
+        "City": "category",
+        "County": "category",
+        "State": "category",
+        "Country": "category",
+        "Weather_Condition": "category",
+        "Street": "string",
+        "Description": "string",
+        "Sunrise_Sunset": "category",
+    }
+    return pd.read_csv(
+        EXTERNAL_CLEAN_CSV,
+        parse_dates=["Start_Time"],
+        dtype={k: v for k, v in dtype.items() if k in KEEP_COLS},
+        low_memory=False,
+    )
+
+
 def build_clean_to_parent() -> pd.DataFrame:
     """ETL -> save cleaned CSV at ..\\accidents_clean\\US_Accidents_March23_clean.csv, return cleaned df."""
     raw_path = _find_raw_csv()
-    df_raw   = pd.read_csv(raw_path, usecols=lambda c: c in KEEP_COLS, on_bad_lines="skip", low_memory=False)
-    df_clean = _etl_clean_dataframe(df_raw)
     os.makedirs(EXTERNAL_PROCESSED_DIR, exist_ok=True)
-    df_clean.to_csv(EXTERNAL_CLEAN_CSV, index=False)
+    if os.path.exists(EXTERNAL_CLEAN_CSV):
+        os.remove(EXTERNAL_CLEAN_CSV)
+
+    total_rows = 0
+    first_chunk = True
+    reader = pd.read_csv(
+        raw_path,
+        usecols=lambda c: c in KEEP_COLS,
+        on_bad_lines="skip",
+        low_memory=False,
+        chunksize=CLEAN_CHUNK_SIZE,
+    )
+    for chunk_number, chunk in enumerate(reader, start=1):
+        df_clean = _etl_clean_dataframe(chunk)
+        total_rows += len(df_clean)
+        df_clean.to_csv(EXTERNAL_CLEAN_CSV, mode="a", header=first_chunk, index=False)
+        first_chunk = False
+        print(f"[ETL] Processed chunk {chunk_number:,}; cleaned rows so far: {total_rows:,}")
+
     print(f"[ETL] Cleaned dataset saved to:\n  {EXTERNAL_CLEAN_CSV}")
-    return df_clean
+    return _load_clean_csv()
 
 def load_external_clean_or_build() -> pd.DataFrame:
     if os.path.exists(EXTERNAL_CLEAN_CSV):
-        return pd.read_csv(EXTERNAL_CLEAN_CSV, parse_dates=["Start_Time"], low_memory=False)
+        return _load_clean_csv()
     return build_clean_to_parent()
 
 
@@ -78,24 +122,3 @@ def load_dataset(use_sample: bool = False) -> pd.DataFrame:
 
 def ld(*_args, **_kwargs) -> pd.DataFrame:
     return load_dataset()
-
-# def ld(p, yrs=None):
-#     keep = [
-#         "Start_Time", "Severity",
-#         "City",
-#         "Weather_Condition", "Visibility(mi)", "Precipitation(in)",
-#         "Temperature(F)", "Wind_Speed(mph)",
-#         "Bump", "Crossing", "Street", "Description",
-#     ]
-#     df = pd.read_csv(p, usecols=lambda c: c in keep, on_bad_lines="skip")
-#     df["Start_Time"] = pd.to_datetime(df["Start_Time"], errors="coerce")
-#     df = df.dropna(subset=["Start_Time", "Severity"])
-#     df = base_preprocess_datetime(
-#         df,
-#         apply_outliers=True,
-#         outlier_cols=["Visibility(mi)", "Precipitation(in)", "Temperature(F)", "Wind_Speed(mph)"]
-#     )
-#     df = df[df["year"].between(2016, 2023)]
-#     df = df.dropna(subset=["City"])
-#     df = object_columns_to_category(df, columns=["City", "Weather_Condition"])
-#     return df

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>US Road Accidents Dashboard</title>
+  <style>
+    :root {
+      --ink: #263238;
+      --muted: #687782;
+      --line: #d9e2e8;
+      --panel: #ffffff;
+      --bg: #f5f7f8;
+      --blue: #245b7a;
+      --coral: #d96c5f;
+      --green: #4f8f7b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, Segoe UI, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    header {
+      padding: 34px clamp(18px, 4vw, 56px) 18px;
+      background: #ffffff;
+      border-bottom: 1px solid var(--line);
+    }
+    h1 { margin: 0 0 8px; font-size: clamp(28px, 4vw, 44px); letter-spacing: 0; }
+    p { margin: 0; color: var(--muted); line-height: 1.55; }
+    .note { margin-top: 8px; font-weight: 600; color: var(--coral); }
+    main {
+      width: min(1180px, calc(100% - 32px));
+      margin: 24px auto 48px;
+    }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .metric, .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .metric { padding: 16px; min-height: 94px; }
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .metric strong { font-size: 22px; line-height: 1.15; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+    .panel { padding: 18px; overflow: hidden; }
+    .panel.wide { grid-column: 1 / -1; }
+    h2 { margin: 0 0 14px; font-size: 18px; }
+    img { width: 100%; display: block; border-radius: 6px; border: 1px solid var(--line); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 9px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+    th { color: var(--muted); font-weight: 600; }
+    footer { color: var(--muted); font-size: 13px; padding: 8px 0 0; }
+    @media (max-width: 900px) {
+      .metrics, .grid { grid-template-columns: 1fr; }
+      .metric strong { font-size: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>US Road Accidents Dashboard</h1>
+    <p>Generated from the full dataset. Built to make the analysis reviewable without opening Python.</p>
+    <p class='note'>2023 is partial through 2023-03-31.</p>
+  </header>
+  <main>
+    <section class="metrics"><section class='metric'><span>Rows</span><strong>7,728,141</strong></section><section class='metric'><span>Period</span><strong>2016-2023</strong></section><section class='metric'><span>High-Severity Share</span><strong>19.5%</strong></section><section class='metric'><span>Top City</span><strong>Miami (186,917)</strong></section><section class='metric'><span>Cities</span><strong>13,622</strong></section></section>
+    <section class="grid">
+      <article class="panel wide">
+        <h2>Yearly trend</h2>
+        <img src="figures/yearly_trend.png" alt="Accidents and high-severity share by year">
+      </article>
+      <article class="panel">
+        <h2>Top cities</h2>
+        <img src="figures/top_cities.png" alt="Top cities by accident count">
+      </article>
+      <article class="panel">
+        <h2>Severity distribution</h2>
+        <img src="figures/severity_distribution.png" alt="Severity distribution">
+      </article>
+      <article class="panel wide">
+        <h2>Time heatmap</h2>
+        <img src="figures/time_heatmap.png" alt="Accidents by weekday and hour">
+      </article>
+      <article class="panel wide">
+        <h2>Context high-severity lift</h2>
+        <img src="figures/severity_by_context.png" alt="Segments by high-severity share">
+      </article>
+      <article class="panel wide">
+        <h2>Location overview</h2>
+        <img src="figures/accident_locations.png" alt="Accident locations">
+      </article>
+      <article class="panel">
+        <h2>Top city table</h2>
+        <table><thead><tr><th>City</th><th>Accidents</th></tr></thead><tbody><tr><td>Miami</td><td>186,917</td></tr><tr><td>Houston</td><td>169,609</td></tr><tr><td>Los Angeles</td><td>156,491</td></tr><tr><td>Charlotte</td><td>138,652</td></tr><tr><td>Dallas</td><td>130,939</td></tr><tr><td>Orlando</td><td>109,733</td></tr><tr><td>Austin</td><td>97,359</td></tr><tr><td>Raleigh</td><td>86,079</td></tr></tbody></table>
+      </article>
+      <article class="panel">
+        <h2>Data quality checks</h2>
+        <table><thead><tr><th>Check</th><th>Value</th><th>Note</th></tr></thead><tbody><tr><td>Rows after cleaning</td><td>7728141</td><td>Rows available for analysis</td></tr><tr><td>Columns after cleaning</td><td>38</td><td>Columns retained for analysis</td></tr><tr><td>Duplicate IDs</td><td>0</td><td>Should be 0</td></tr><tr><td>Invalid severity values</td><td>0</td><td>Expected values are 1-4</td></tr><tr><td>Rows with invalid state code</td><td>0</td><td>Useful for catching shifted CSV fields</td></tr><tr><td>Rows with non-US country value</td><td>0</td><td>Usually a parsing or sample-quality issue</td></tr><tr><td>Rows outside continental-US coordinate bounds</td><td>0</td><td>Loose coordinate sanity check</td></tr><tr><td>Missing values: Precipitation(in)</td><td>28.5%</td><td>Top missing-value columns</td></tr><tr><td>Missing values: Wind_Speed(mph)</td><td>7.4%</td><td>Top missing-value columns</td></tr><tr><td>Missing values: wind_speed_bin</td><td>7.4%</td><td>Top missing-value columns</td></tr><tr><td>Missing values: Visibility(mi)</td><td>2.3%</td><td>Top missing-value columns</td></tr><tr><td>Missing values: Weather_Condition</td><td>2.2%</td><td>Top missing-value columns</td></tr><tr><td>Missing values: Temperature(F)</td><td>2.1%</td><td>Top missing-value columns</td></tr><tr><td>Missing values: Sunrise_Sunset</td><td>0.3%</td><td>Top missing-value columns</td></tr><tr><td>Missing values: Street</td><td>0.1%</td><td>Top missing-value columns</td></tr></tbody></table>
+      </article>
+    </section>
+    <footer>Sample insights are descriptive and should not be treated as causal conclusions.</footer>
+  </main>
+</body>
+</html>
